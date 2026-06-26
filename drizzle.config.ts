@@ -1,5 +1,10 @@
 import { defineConfig } from "drizzle-kit";
-import "dotenv/config";
+import { config } from "dotenv";
+
+// Next.js auto-loads .env.local, but drizzle-kit doesn't — load it explicitly
+// (.env.local takes precedence; .env is a non-overriding fallback).
+config({ path: ".env.local" });
+config();
 
 // Mirror src/db/connection.ts: accept DATABASE_URL or the integration's PG* vars.
 function credentials() {
@@ -14,6 +19,12 @@ function credentials() {
       database: PGDATABASE ?? "postgres",
       ssl: { rejectUnauthorized: false },
     };
+  }
+  if (PGHOST && PGUSER && !PGPASSWORD) {
+    throw new Error(
+      "PGPASSWORD is not set. Set a master password on the Aurora cluster (RDS console → Modify) " +
+        "and add PGPASSWORD to .env.local (and Vercel)."
+    );
   }
   return { url: "" };
 }

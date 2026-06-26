@@ -6,7 +6,9 @@
  * some products below their reorder point so the headline questions return
  * satisfying results.
  */
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
+config();
 import { faker } from "@faker-js/faker";
 import { db, schema } from "../src/db/client";
 import { rwPool } from "../src/db/pools";
