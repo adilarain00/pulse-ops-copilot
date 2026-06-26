@@ -30,11 +30,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const force = new URL(req.url).searchParams.get("force") === "1";
+  const params = new URL(req.url).searchParams;
+  const force = params.get("force") === "1";
+
+  // Fast diagnostic: just prove the IAM connection works (mint token + SELECT 1).
+  if (params.get("probe") === "1") {
+    const t0 = Date.now();
+    try {
+      const r = await rwPool().query("SELECT 1 AS ok");
+      return NextResponse.json({ ok: true, probe: true, result: r.rows[0], tookMs: Date.now() - t0 });
+    } catch (err) {
+      console.error("[setup] probe failed:", err);
+      return NextResponse.json(
+        { error: "probe failed", detail: (err as Error)?.message, tookMs: Date.now() - t0 },
+        { status: 500 }
+      );
+    }
+  }
 
   try {
     // 1) Schema (idempotent)
+    console.log("[setup] applying schema DDL…");
+    const t0 = Date.now();
     await rwPool().query(SCHEMA_DDL);
+    console.log(`[setup] schema ready in ${Date.now() - t0}ms`);
 
     // 2) Seed (skip if already populated, unless forced)
     const existing = await rwPool().query("SELECT count(*)::int AS n FROM orders");
@@ -48,7 +67,10 @@ export async function POST(req: Request) {
       });
     }
 
+    console.log("[setup] seeding…");
+    const tSeed = Date.now();
     const counts = await seedDatabase();
+    console.log(`[setup] seeded in ${Date.now() - tSeed}ms`, counts);
     return NextResponse.json({ ok: true, schema: "ready", seeded: true, counts });
   } catch (err) {
     console.error("[setup] failed:", err);
