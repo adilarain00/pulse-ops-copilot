@@ -22,8 +22,9 @@ function credentials() {
   }
   if (PGHOST && PGUSER && !PGPASSWORD) {
     throw new Error(
-      "PGPASSWORD is not set. Set a master password on the Aurora cluster (RDS console → Modify) " +
-        "and add PGPASSWORD to .env.local (and Vercel)."
+      "No DB password in env. For the Vercel Aurora IAM integration, run `pnpm db:push` " +
+        "(it mints an IAM token automatically) rather than drizzle-kit directly. " +
+        "Or set DATABASE_URL / PGPASSWORD for password auth."
     );
   }
   return { url: "" };
