@@ -3,30 +3,25 @@
  *
  *  - rwPool  : full CRUD, used by app logic + the /api/act write path.
  *  - roPool  : the role the NL->SQL engine executes against. In production this
- *              role has SELECT-only grants and a server-side statement_timeout,
- *              so even if a malicious query slips past the validator, the
- *              database itself refuses to write or run long.
+ *              role has SELECT-only grants and a statement_timeout, so even a
+ *              malicious query that slips past the validator can't write or run
+ *              long. Falls back to the RW connection if no RO role is set.
  *
  * Pools are cached on globalThis so Next.js hot-reload / serverless invocations
  * reuse connections instead of exhausting Aurora's connection limit.
  */
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
+import { pgConfig, readOnlyPgConfig, hasReadOnlyRole } from "./connection";
 
 type Pools = { rw?: Pool; ro?: Pool };
 const g = globalThis as unknown as { __pulsePools?: Pools };
 g.__pulsePools ??= {};
 
-function makePool(url: string, readOnly: boolean): Pool {
-  const pool = new Pool({
-    connectionString: url,
-    max: 5,
-    idleTimeoutMillis: 30_000,
-    // Aurora requires TLS; relax verification only outside production.
-    ssl: process.env.PGSSL_DISABLE === "1" ? false : { rejectUnauthorized: false },
-  });
-  // Belt-and-suspenders: cap statement time on the read path even if the
-  // database role wasn't configured with its own timeout.
+function makePool(config: PoolConfig, readOnly: boolean): Pool {
+  const pool = new Pool({ ...config, max: 5, idleTimeoutMillis: 30_000 });
   if (readOnly) {
+    // Belt-and-suspenders: cap statement time on the read path even if the DB
+    // role wasn't configured with its own timeout.
     pool.on("connect", (client) => {
       client.query("SET statement_timeout = 4000").catch(() => {});
     });
@@ -35,20 +30,16 @@ function makePool(url: string, readOnly: boolean): Pool {
 }
 
 export function rwPool(): Pool {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  return (g.__pulsePools!.rw ??= makePool(url, false));
+  return (g.__pulsePools!.rw ??= makePool(pgConfig(), false));
 }
 
-/** Read-only pool for the AI query path. Falls back to DATABASE_URL in dev. */
 export function roPool(): Pool {
-  const url = process.env.DATABASE_URL_RO ?? process.env.DATABASE_URL;
-  if (!url) throw new Error("Neither DATABASE_URL_RO nor DATABASE_URL is set");
-  if (!process.env.DATABASE_URL_RO) {
+  if (!hasReadOnlyRole()) {
     console.warn(
-      "[pulse] DATABASE_URL_RO not set — using DATABASE_URL for the read path. " +
-        "Create the pulse_readonly role before the demo for the security story."
+      "[pulse] No read-only role configured (DATABASE_URL_RO / PGUSER_RO) — " +
+        "using the primary connection for the read path. Set one before the demo " +
+        "for the least-privilege security story."
     );
   }
-  return (g.__pulsePools!.ro ??= makePool(url, true));
+  return (g.__pulsePools!.ro ??= makePool(readOnlyPgConfig(), true));
 }
