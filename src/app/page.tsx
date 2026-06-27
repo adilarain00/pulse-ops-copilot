@@ -33,6 +33,15 @@ type AuditEntry = {
   created_at: string;
 };
 
+type QueryHistoryEntry = {
+  id: string;
+  nl_question: string;
+  generated_sql: string;
+  row_count: number;
+  latency_ms: number;
+  created_at: string;
+};
+
 type Message = {
   id: string;
   question: string;
@@ -112,6 +121,7 @@ export default function Home() {
   const [pending, setPending] = useState<{ action: Action; explanation: string } | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [auditTick, setAuditTick] = useState(0);
+  const [queryHistory, setQueryHistory] = useState<QueryHistoryEntry[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -120,6 +130,21 @@ export default function Home() {
       .then(setKpis)
       .catch(() => setKpis({ unavailable: true }));
   }, []);
+
+  useEffect(() => {
+    // Fetch query history on mount and after each new message
+    (async () => {
+      try {
+        const r = await fetch("/api/history");
+        if (r.ok) {
+          const data = await r.json();
+          setQueryHistory(data.entries ?? []);
+        }
+      } catch {
+        // Silently fail
+      }
+    })();
+  }, [messages.length]);
 
   async function ask(question: string) {
     if (!question.trim() || loading) return;
@@ -300,6 +325,9 @@ export default function Home() {
           </section>
         )}
 
+        {/* ── Query History ─────────────────────────────────────────────────── */}
+        <QueryHistoryPanel entries={queryHistory} />
+
         {/* ── Audit log ─────────────────────────────────────────────────────── */}
         <AuditPanel refreshKey={auditTick} />
       </main>
@@ -389,6 +417,8 @@ function QueryResult({
       </div>
 
       <p className="text-sm text-slate-700">{res.explanation}</p>
+
+      <SafetyPipeline latencyMs={res.latencyMs} />
 
       {res.chartSpec.type !== "table" && (
         <Chart spec={res.chartSpec} columns={res.columns} rows={res.rows} />
@@ -681,4 +711,78 @@ function Banner({
     info: "border-blue-200 bg-blue-50 text-blue-800",
   }[tone];
   return <div className={`rounded-xl border px-4 py-3 text-sm ${styles}`}>{children}</div>;
+}
+
+// ─── SafetyPipeline ───────────────────────────────────────────────────────────
+
+function SafetyPipeline({ latencyMs }: { latencyMs: number }) {
+  const pipeline = [
+    { step: 1, label: "Structured JSON", icon: "◈" },
+    { step: 2, label: "Zod Validation", icon: "✓" },
+    { step: 3, label: "SQL Parser", icon: "◀" },
+    { step: 4, label: "RO Role", icon: "🔒" },
+    { step: 5, label: "Statement Timeout", icon: "⏱" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-indigo-50 to-slate-50 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          5-Layer Safety Pipeline
+        </span>
+        <span className="text-xs text-slate-400">{latencyMs} ms</span>
+      </div>
+      <div className="flex items-center gap-1">
+        {pipeline.map((layer, idx) => (
+          <div key={layer.step} className="flex flex-1 items-center gap-0.5">
+            <div
+              title={layer.label}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white"
+            >
+              {layer.icon}
+            </div>
+            {idx < pipeline.length - 1 && (
+              <div className="h-0.5 flex-1 bg-gradient-to-r from-indigo-300 to-slate-300" />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-xs text-slate-600">
+        All AI-generated SQL runs through <strong>5 independent safety layers</strong>: structured output validation →
+        parser allowlist → read-only Postgres role → automatic statement timeout.
+      </div>
+    </div>
+  );
+}
+
+// ─── QueryHistoryPanel ────────────────────────────────────────────────────────
+
+function QueryHistoryPanel({ entries }: { entries: QueryHistoryEntry[] }) {
+  if (entries.length === 0) return null;
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500">
+        Query History ({entries.length})
+      </h2>
+      <div className="space-y-2">
+        {entries.slice(0, 5).map((entry) => (
+          <div key={entry.id} className="group rounded-lg border border-slate-100 bg-slate-50 p-3 hover:bg-slate-100">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 line-clamp-1">{entry.nl_question}</p>
+                <p className="mt-1 font-mono text-xs text-slate-500 line-clamp-1">{entry.generated_sql}</p>
+              </div>
+              <div className="flex-shrink-0 text-right">
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
+                  {entry.row_count} rows
+                </span>
+                <span className="block text-xs text-slate-400 mt-1">{entry.latency_ms} ms</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
