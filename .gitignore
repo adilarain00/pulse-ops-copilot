@@ -34,6 +34,8 @@ yarn-error.log*
 .env*
 !.env.example
 
+BUILD-GUIDE.md
+
 # vercel
 .vercel
 
@@ -42,4 +44,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+.env*.local
+
 .env*.local

@@ -5,10 +5,13 @@
  */
 import { NextResponse } from "next/server";
 import { roPool } from "@/db/pools";
+import { isDemoMode, demoKpis } from "@/lib/demo";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  if (isDemoMode()) return NextResponse.json(demoKpis());
+
   try {
     const pool = roPool();
     const [revenue, stuck, lowStock, refundRate] = await Promise.all([

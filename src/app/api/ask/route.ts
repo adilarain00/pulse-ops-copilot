@@ -14,6 +14,7 @@ import { z } from "zod";
 import { generatePlan } from "@/lib/plan";
 import { guardSelect, UnsafeSqlError } from "@/lib/sql-guard";
 import { roPool, rwPool } from "@/db/pools";
+import { isDemoMode, mockAsk } from "@/lib/demo";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Body must be { question: string }" }, { status: 400 });
   }
+
+  if (isDemoMode()) return NextResponse.json(mockAsk(question));
 
   // 1) NL -> plan
   let plan;

@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ActionSchemas, executeAction, isActionName } from "@/lib/actions";
+import { isDemoMode, mockAct } from "@/lib/demo";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,16 @@ export async function POST(req: Request) {
     body = Body.parse(await req.json());
   } catch {
     return NextResponse.json({ error: "Body must be { name, args }" }, { status: 400 });
+  }
+
+  if (isDemoMode()) {
+    if (!isActionName(body.name))
+      return NextResponse.json({ error: `Unknown action: ${body.name}` }, { status: 400 });
+    const parsed = ActionSchemas[body.name].safeParse(body.args);
+    if (!parsed.success)
+      return NextResponse.json({ error: "Invalid arguments", issues: parsed.error.issues }, { status: 400 });
+    const result = mockAct(body.name, parsed.data as Record<string, unknown>);
+    return NextResponse.json({ ok: true, ...result });
   }
 
   if (!isActionName(body.name)) {

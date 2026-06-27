@@ -4,10 +4,13 @@
  */
 import { NextResponse } from "next/server";
 import { rwPool } from "@/db/pools";
+import { isDemoMode, demoAuditLog } from "@/lib/demo";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  if (isDemoMode()) return NextResponse.json({ entries: demoAuditLog() });
+
   try {
     const r = await rwPool().query(
       `SELECT id, actor, action_type, entity_type, payload, created_at
