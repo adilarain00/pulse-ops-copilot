@@ -57,11 +57,22 @@ git push origin main
 
 ## 🎬 SUBMISSION ARTIFACTS (2 hours, do in parallel if possible)
 
-### 6️⃣ Architecture diagram PNG (15 min)
-- [ ] Go to https://mermaid.live
-- [ ] Paste contents of `docs/architecture.md` (the Mermaid diagram)
-- [ ] Click "Edit" → "Export" → "Download as PNG"
-- [ ] Save as `pulse-architecture.png` locally
+### 6️⃣ Architecture diagram PNG (10 min)
+
+**Quick export:**
+1. Open https://mermaid.live/edit
+2. Delete the default diagram
+3. Copy the Mermaid diagram from your repo: `docs/architecture.md` (everything after the first heading)
+4. Paste it into mermaid.live
+5. Click **"Mermaid Config"** (top-right) → scroll down to find **"Download"** or look for **Export** button
+6. Choose **PNG** format
+7. Save file as `pulse-architecture.png`
+8. Keep this file locally for Devpost upload
+
+**Mermaid source (if you need it):**
+```
+[See docs/architecture.md in your repo for the full diagram]
+```
 
 ### 7️⃣ AWS usage screenshot (5 min)
 **Option A (easier):**
@@ -116,13 +127,33 @@ git push origin main
 - [ ] Demo video link (YouTube)
 - [ ] Attach: `pulse-architecture.png`, `aws-storage-screenshot.png`
 
-### 🔟 GitHub repo (already done, just verify)
-- [ ] GitHub: https://github.com/adilarain00/pulse-ops-copilot
-- [ ] Public (not private)
-- [ ] README.md updated ✅
-- [ ] BUILD-GUIDE.md §26 updated ✅
-- [ ] LICENSE included ✅
-- [ ] `.env.example` (no secrets in repo) ✅
+### 🔟 Devpost Text (copy-paste ready)
+
+- [ ] Go to https://h0-hackathon.devpost.com → Create/edit submission
+- [ ] **Paste the following into the "Description" field:**
+
+```
+[Copy full contents of DEVPOST-SUBMISSION.md from your repo]
+```
+
+- [ ] **Key fields:**
+  - Title: "Pulse — AI Ops Copilot for SMBs"
+  - Demo link: [your YouTube URL]
+  - Vercel URL: [your live deployment]
+  - GitHub: https://github.com/adilarain00/pulse-ops-copilot
+  - Vercel Team ID: `[paste from Vercel dashboard]`
+  - Attachments: architecture-diagram.png, aws-screenshot.png
+
+---
+
+### 1️⃣1️⃣ GitHub repo (already done, just verify)
+- [x] GitHub: https://github.com/adilarain00/pulse-ops-copilot ✅
+- [x] Public (not private) ✅
+- [x] README.md updated ✅
+- [x] LICENSE included ✅
+- [x] `.env.local` and `.env*.local` in .gitignore ✅
+- [x] No secrets committed ✅
+- [x] DEVPOST-SUBMISSION.md ready ✅
 
 ---
 
