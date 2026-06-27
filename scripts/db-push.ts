@@ -1,32 +1,42 @@
 /**
  * `pnpm db:push` wrapper.
  *
- * drizzle-kit needs a static password, but the Vercel Aurora integration uses
- * IAM (no password). So in IAM mode we mint a short-lived RDS token and hand it
- * to drizzle-kit as PGPASSWORD for this one run. With DATABASE_URL/PGPASSWORD
- * already set, we just pass through.
+ * Handles three auth modes:
+ *   1. DATABASE_URL (classic)
+ *   2. PGPASSWORD + discrete PG* vars (password auth)
+ *   3. AWS IAM (Vercel integration) — mints a short-lived RDS token
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 config();
 
-import { spawnSync } from "node:child_process";
-import { getIamToken, isIamMode } from "../src/db/iam";
+import { execSync } from "node:child_process";
+import { ensureDbAuth } from "./ensure-db-auth";
 
 async function main() {
-  const env = { ...process.env };
+  const env = await ensureDbAuth();
+  console.log("\n[db-push] Now running drizzle-kit push...\n");
 
-  if (!env.DATABASE_URL && !env.PGPASSWORD && isIamMode()) {
-    console.log("IAM mode detected — minting a short-lived RDS auth token…");
-    env.PGPASSWORD = await getIamToken();
+  // Use execSync with stdio: "inherit" to preserve TTY for interactive prompts
+  try {
+    execSync("pnpm exec drizzle-kit push", {
+      stdio: "inherit",
+      env,
+      shell: process.platform === "win32" ? "powershell" : "/bin/bash",
+    });
+    console.log("\n[db-push] ✓ Schema pushed successfully!");
+  } catch (err) {
+    const e = err as Error;
+    if (e.message.includes("Interactive prompts")) {
+      console.error("\n[db-push] ✗ TTY issue: drizzle-kit needs interactive terminal.");
+      console.error("[db-push] Try running this command directly in PowerShell:");
+      console.error(`  cd "${process.cwd()}"`);
+      console.error("  pnpm db:push");
+      console.error("[db-push] Then press 'y' to confirm the migration when prompted.");
+      process.exit(1);
+    }
+    throw new Error(`drizzle-kit push failed: ${e.message}`);
   }
-
-  const result = spawnSync("pnpm", ["exec", "drizzle-kit", "push"], {
-    stdio: "inherit",
-    env,
-    shell: true,
-  });
-  process.exit(result.status ?? 1);
 }
 
 main().catch((err) => {

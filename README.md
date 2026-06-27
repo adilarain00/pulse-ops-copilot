@@ -12,34 +12,56 @@ plus a confirmed, audited action layer for safe writes. Built for the H0 hackath
 | Deliberate schema (10 tables, indexes, FKs) — `src/db/schema.ts` | ✅ generates valid DDL |
 | Two-pool least-privilege DB access — `src/db/pools.ts` | ✅ |
 | **SQL guard** (fail-closed regex + AST allowlist + LIMIT) — `src/lib/sql-guard.ts` | ✅ **14/14 tests pass** |
-| NL→plan via Claude (structured + Zod) — `src/lib/plan.ts` | ✅ code complete (needs API key to run) |
-| **`POST /api/ask`** read path | ✅ code complete (needs DB + key to run) |
-| Ask UI — `src/app/page.tsx` | ✅ |
-| Seed script — `scripts/seed.ts` | ✅ (needs DB) |
-| **Action layer** — allowlisted, transactional, audited writes — `src/lib/actions.ts` | ✅ **9/9 tests pass** |
+| NL→plan via Claude (structured + Zod) — `src/lib/plan.ts` | ✅ code complete |
+| **`POST /api/ask`** read path | ✅ code complete |
 | **`POST /api/act`** (confirmed writes) + **`GET /api/audit`** | ✅ code complete |
-| Confirmation modal + live audit panel — `src/app/page.tsx` | ✅ |
-| Charts (Recharts) — number/bar/line/pie from `chart_spec` — `src/components/Chart.tsx` | ✅ |
-| KPI home cards + `GET /api/kpis` — `src/components/KpiCards.tsx` | ✅ |
+| **Action layer** — allowlisted, transactional, audited writes — `src/lib/actions.ts` | ✅ **9/9 tests pass** |
+| Confirmation modal + live audit panel | ✅ |
+| Charts (Recharts) — number/bar/line/pie from `chart_spec` | ✅ |
+| KPI home cards + `GET /api/kpis` | ✅ with trend indicators |
+| Demo Mode — simulated AI + DB (DEMO_MODE=true) | ✅ `src/lib/demo.ts` |
+| UI redesign — dark header, conversation history, timeline audit | ✅ |
 | Architecture diagram (mermaid, ready to export) — `docs/architecture.md` | ✅ |
+| Database seeded (50 products, 150 customers, 300 orders, 15 stuck) | ✅ |
+| Vercel deployment (Aurora Marketplace integration) | ✅ |
 
 `pnpm build`, `pnpm typecheck`, `pnpm test:guard`, and `pnpm test:actions` all pass with **no DB or API key**.
 
-## Run it (after provisioning)
+## Run it locally
 
+### Demo Mode (no Aurora / Anthropic credits needed)
 ```bash
-cp .env.example .env.local      # then fill in the values
+# Fresh OIDC token (Vercel Marketplace vars auto-inject)
+npx vercel env pull .env.local
 
-# 1) Provision Aurora PostgreSQL via the Vercel AWS Marketplace; put its URL in DATABASE_URL
-# 2) Apply schema
-pnpm db:push
-# 3) (recommended) create the read-only role, then set DATABASE_URL_RO
-#    psql "$DATABASE_URL" -f drizzle/readonly-role.sql
-# 4) Seed demo data
-pnpm db:seed
-# 5) Set ANTHROPIC_API_KEY, then run
+# Add ANTHROPIC_API_KEY back (vercel pull removes it)
+# Then add DEMO_MODE=true to .env.local
+
 pnpm dev      # http://localhost:3000
+# Demo Mode banner explains the simulated AI/DB path
 ```
+
+### Live Mode (with Aurora + Anthropic credits)
+```bash
+npx vercel env pull .env.local
+# Add ANTHROPIC_API_KEY to .env.local
+# Remove DEMO_MODE from .env.local
+
+# 1) Apply schema (once per database)
+pnpm db:push    # Run in PowerShell; press Y to confirm migration
+
+# 2) Seed demo data (optional)
+pnpm db:seed    # Loads 50 products, 150 customers, 300 orders with 15 stuck
+
+# 3) Dev server
+pnpm dev        # http://localhost:3000
+```
+
+### Vercel Deployment
+1. Add `ANTHROPIC_API_KEY` to Vercel project Settings → Environment Variables
+2. Optionally add `DEMO_MODE=true` if you want judges to see simulated AI
+3. Push code to GitHub → auto-deploys via Vercel git integration
+4. Visit your live Vercel URL
 
 ## Scripts
 - `pnpm dev` / `build` / `start` — Next.js
@@ -49,8 +71,35 @@ pnpm dev      # http://localhost:3000
 - `pnpm db:push` — apply schema to the database
 - `pnpm db:seed` — load realistic DTC demo data
 
-## Safety model (the H0 centerpiece)
-1. Model returns **structured JSON** (Zod-validated), never free-form SQL trusted blindly.
-2. `guardSelect()` fail-closes: single statement, SELECT/WITH only, no DML/DDL keywords, table allowlist, forced `LIMIT`.
-3. Reads execute on a **read-only Postgres role** with a 4s `statement_timeout` — defense in depth.
-4. Writes never use model SQL — they go through allowlisted, confirmed, audited actions (Day 2).
+## Safety & Architecture (the H0 centerpiece)
+
+**Five-layer read safety:**
+1. Structured JSON output (Zod-validated) — never raw SQL strings
+2. SQL parser allowlist (SELECT-only, no DML/DDL, allowed tables)
+3. Fail-closed regex guards + forced LIMIT
+4. Execute on read-only Postgres role (no write privilege)
+5. Statement timeout (4s) enforced by role
+
+**Write safety — human-in-the-loop:**
+1. AI proposes one of three allowlisted actions (not SQL)
+2. UI shows confirmation modal with exact args
+3. User approves → parameterized transaction (no string concat)
+4. Every write logged to JSONB `audit_log` with full payload
+5. Live audit panel shows all actions in real-time
+
+**Two database roles:**
+- `pulse_app` (RW) — used only for confirmed writes + logging
+- `pulse_readonly` (RO, SELECT-only) — used for all AI-generated queries
+
+This design means: AI SQL failures are safe (readonly role can't write), model hallucinations can't access system catalogs, and every action is auditable.
+
+---
+
+## The Quick Differentiator
+
+Most NL→SQL hackathon projects are read-only chatbots. Pulse goes further:
+- **Ask** (NL question → safe chart + table)
+- **Act** (propose an action → confirm modal → parameterized transaction)
+- **Audit** (live timeline of every action, full payload visible)
+
+The Act+Audit loop with human confirmation is the story for judges.
